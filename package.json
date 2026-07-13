@@ -1,0 +1,17 @@
+{
+  "name": "encore",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n db,api,web -c yellow,magenta,cyan \"npm run db -w backend\" \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "db:setup": "npm run db:setup -w backend",
+    "smoke": "npm run smoke -w backend",
+    "build": "npm run build -w frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
