@@ -13,7 +13,9 @@ Built with React, Node and PostgreSQL.
 - **Backend** — Node + Express 5 (TypeScript), `node-postgres` with hand-written
   SQL. No ORM on purpose: the interesting parts of this project are the queries.
 - **Database** — PostgreSQL. Auth uses bcrypt password hashing and a JWT in an
-  httpOnly cookie.
+  httpOnly cookie (the mobile app uses the same JWT as a bearer token instead).
+- **Mobile** — an Expo / React Native companion app: a ticket wallet with QR
+  codes, plus a door check-in scanner for organizers.
 
 ## Running it
 
@@ -35,6 +37,18 @@ There's a demo account if you want data in the dashboards:
 
 If you'd rather point it at your own Postgres (there's a `docker-compose.yml`
 for that), set `DATABASE_URL` in `backend/.env` and run `npm run db:setup` once.
+
+The mobile app lives in `mobile/` with its own dependencies:
+
+```
+cd mobile
+npm install
+npx expo start
+```
+
+Scan the QR code with Expo Go on your phone (the app finds the API on the
+same machine automatically), or press `w` for a browser preview — everything
+except camera scanning works on web, and there's a manual code entry for that.
 
 ## How double-booking is prevented
 
@@ -58,9 +72,14 @@ re-reads the updated `sold` count and gets a clean `409 Sold out` instead of
 overselling. A `check (sold <= quantity)` constraint on the table backs this up
 at the schema level in case application code ever regresses.
 
-There's a test for exactly this race: `npm run smoke` (with the dev
-stack running) fires simultaneous orders from two users for overlapping seats —
-one gets a 201, the other a 409.
+The same pattern guards the door: each admission is its own `tickets` row with
+a unique code, and check-in locks that row — so two staff scanning the same QR
+at the same moment can't both admit it.
+
+There's a test for both races: `npm run smoke` (with the dev stack running)
+fires simultaneous orders from two users for overlapping seats, then two
+simultaneous check-ins of the same ticket — in each case one succeeds and the
+other gets a clean 409.
 
 ## Project layout
 
@@ -74,6 +93,8 @@ backend/
 frontend/
   src/pages/           browse, event detail, auth, tickets, host
   src/components/      cards, covers, navbar
+mobile/
+  src/screens/         login, ticket wallet, QR ticket, door scanner
 ```
 
 ## API
@@ -88,7 +109,9 @@ frontend/
 | GET    | `/api/events/:slug`  | event detail with live availability       |
 | POST   | `/api/events`        | create event with ticket tiers (auth)     |
 | POST   | `/api/orders`        | book tickets, transactional (auth)        |
-| GET    | `/api/orders/mine`   | my tickets (auth)                         |
+| GET    | `/api/orders/mine`   | my orders (auth)                          |
+| GET    | `/api/tickets/mine`  | my individual tickets with QR codes (auth)|
+| POST   | `/api/tickets/checkin` | mark a ticket used, organizer only (auth)|
 | GET    | `/api/host/events`   | my hosted events with sales (auth)        |
 
 Validation is zod on every write endpoint; errors come back as
