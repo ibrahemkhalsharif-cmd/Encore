@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../auth';
@@ -69,11 +70,18 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
 
     for (const item of items) {
       const tier = tierById.get(item.ticketTypeId)!;
-      await tx.query(
+      const { rows: inserted } = await tx.query<{ id: number }>(
         `insert into order_items (order_id, ticket_type_id, quantity, unit_price_cents)
-         values ($1, $2, $3, $4)`,
+         values ($1, $2, $3, $4) returning id`,
         [created[0].id, item.ticketTypeId, item.quantity, tier.price_cents]
       );
+      // one ticket row per admission — each gets its own QR code
+      for (let n = 0; n < item.quantity; n++) {
+        await tx.query(
+          'insert into tickets (order_item_id, code) values ($1, $2)',
+          [inserted[0].id, randomBytes(5).toString('hex').toUpperCase()]
+        );
+      }
       await tx.query('update ticket_types set sold = sold + $1 where id = $2', [
         item.quantity,
         item.ticketTypeId,

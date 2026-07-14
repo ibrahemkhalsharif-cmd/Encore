@@ -161,6 +161,28 @@ export async function bootstrap(databaseUrl: string) {
       await pool.query(readFileSync(schemaPath, 'utf8'));
     }
 
+    // tickets table arrived after the first release — migrate older databases
+    const hasTickets = await pool.query(
+      "select to_regclass('public.tickets') as t"
+    );
+    if (!hasTickets.rows[0].t) {
+      console.log('adding tickets table...');
+      await pool.query(`
+        create table tickets (
+          id             serial primary key,
+          order_item_id  int not null references order_items(id) on delete cascade,
+          code           text not null unique,
+          checked_in_at  timestamptz
+        );
+        create index tickets_order_item_idx on tickets (order_item_id);
+      `);
+      await pool.query(`
+        insert into tickets (order_item_id, code)
+        select oi.id, upper(substr(md5(random()::text || oi.id || '-' || gs), 1, 10))
+          from order_items oi, generate_series(1, oi.quantity) gs
+      `);
+    }
+
     const count = await pool.query('select count(*)::int as n from events');
     if (count.rows[0].n === 0) {
       console.log('seeding demo data...');

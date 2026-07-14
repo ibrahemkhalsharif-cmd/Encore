@@ -8,16 +8,28 @@ import { authRouter } from './routes/auth';
 import { eventsRouter } from './routes/events';
 import { hostRouter } from './routes/host';
 import { ordersRouter } from './routes/orders';
+import { ticketsRouter } from './routes/tickets';
 
 const app = express();
 
 app.use(express.json());
 app.use(cookieParser());
 
+// The mobile app calls the API from a different origin using bearer
+// tokens (no cookies), so a permissive CORS policy is fine here.
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 app.use('/api/auth', authRouter);
 app.use('/api/events', eventsRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/host', hostRouter);
+app.use('/api/tickets', ticketsRouter);
 
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'Not found' });

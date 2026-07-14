@@ -44,7 +44,15 @@ create table order_items (
   unit_price_cents int not null
 );
 
+create table tickets (
+  id             serial primary key,
+  order_item_id  int not null references order_items(id) on delete cascade,
+  code           text not null unique,
+  checked_in_at  timestamptz
+);
+
 create index events_starts_at_idx on events (starts_at);
+create index tickets_order_item_idx on tickets (order_item_id);
 create index events_category_idx on events (category);
 create index ticket_types_event_idx on ticket_types (event_id);
 create index orders_user_idx on orders (user_id);

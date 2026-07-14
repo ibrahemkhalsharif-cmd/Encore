@@ -6,7 +6,9 @@ import { fail } from './errors';
 const COOKIE = 'encore_session';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-export function issueSession(res: Response, userId: number) {
+// Sets the browser cookie and also returns the token so API clients
+// that can't use cookies (the mobile app) can store it themselves.
+export function issueSession(res: Response, userId: number): string {
   const token = jwt.sign({ sub: String(userId) }, config.jwtSecret, {
     expiresIn: '7d',
   });
@@ -16,6 +18,7 @@ export function issueSession(res: Response, userId: number) {
     secure: config.isProd,
     maxAge: WEEK_MS,
   });
+  return token;
 }
 
 export function clearSession(res: Response) {
@@ -23,7 +26,9 @@ export function clearSession(res: Response) {
 }
 
 function userIdFromRequest(req: Request): number | null {
-  const token = req.cookies?.[COOKIE];
+  const header = req.get('authorization');
+  const bearer = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  const token = bearer ?? req.cookies?.[COOKIE];
   if (!token) return null;
   try {
     const payload = jwt.verify(token, config.jwtSecret);

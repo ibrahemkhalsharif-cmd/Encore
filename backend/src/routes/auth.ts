@@ -30,8 +30,8 @@ authRouter.post('/register', async (req, res) => {
     [name, email, hash]
   );
 
-  issueSession(res, rows[0].id);
-  res.status(201).json({ user: rows[0] });
+  const token = issueSession(res, rows[0].id);
+  res.status(201).json({ user: rows[0], token });
 });
 
 authRouter.post('/login', async (req, res) => {
@@ -50,8 +50,8 @@ authRouter.post('/login', async (req, res) => {
   const ok = user && (await bcrypt.compare(password, user.password_hash));
   if (!ok) fail(401, 'Wrong email or password');
 
-  issueSession(res, user.id);
-  res.json({ user: { id: user.id, name: user.name, email: user.email } });
+  const token = issueSession(res, user.id);
+  res.json({ user: { id: user.id, name: user.name, email: user.email }, token });
 });
 
 authRouter.post('/logout', (_req, res) => {

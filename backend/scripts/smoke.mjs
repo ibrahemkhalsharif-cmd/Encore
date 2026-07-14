@@ -4,12 +4,13 @@
 // orders for overlapping seats and exactly one should win.
 const base = 'http://localhost:4000';
 
-async function call(path, { method = 'GET', body, cookie } = {}) {
+async function call(path, { method = 'GET', body, cookie, token } = {}) {
   const res = await fetch(base + path, {
     method,
     headers: {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(cookie ? { Cookie: cookie } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -117,6 +118,66 @@ check('my orders lists the booking', mine.status === 200 && mine.data.orders.len
 const host = await call('/api/host/events', { cookie: login.cookie });
 const hosted = host.data.events?.find((e) => e.slug === created.data.event.slug);
 check('host dashboard shows event', !!hosted, `capacity=${hosted?.capacity}`);
+
+// 10. individual tickets with codes exist for the winning order,
+//     and bearer-token auth (the mobile app's path) works
+const winner = r1.status === 201 ? u1 : u2;
+const myTickets = await call('/api/tickets/mine', { token: winner.data.token });
+const eventTickets = (myTickets.data.tickets ?? []).filter(
+  (t) => t.slug === created.data.event.slug
+);
+check(
+  'tickets generated per admission (via bearer token)',
+  myTickets.status === 200 && eventTickets.length === 8,
+  `got ${eventTickets.length} tickets`
+);
+
+// 11. only the organizer can check tickets in
+const code = eventTickets[0].code;
+const notOrganizer = await call('/api/tickets/checkin', {
+  method: 'POST',
+  token: winner.data.token,
+  body: { code },
+});
+check('non-organizer check-in rejected', notOrganizer.status === 403);
+
+// 12. organizer check-in works once, then conflicts
+const first = await call('/api/tickets/checkin', {
+  method: 'POST',
+  cookie: login.cookie,
+  body: { code },
+});
+const again = await call('/api/tickets/checkin', {
+  method: 'POST',
+  cookie: login.cookie,
+  body: { code },
+});
+check(
+  'check-in once then rejected',
+  first.status === 200 && again.status === 409,
+  `got ${first.status} then ${again.status}`
+);
+
+// 13. two door scanners racing on the same fresh ticket
+const code2 = eventTickets[1].code;
+const [s1, s2] = await Promise.all([
+  call('/api/tickets/checkin', { method: 'POST', cookie: login.cookie, body: { code: code2 } }),
+  call('/api/tickets/checkin', { method: 'POST', cookie: login.cookie, body: { code: code2 } }),
+]);
+const scanStatuses = [s1.status, s2.status].sort();
+check(
+  'double check-in blocked (one 200, one 409)',
+  scanStatuses[0] === 200 && scanStatuses[1] === 409,
+  `got ${s1.status} & ${s2.status}`
+);
+
+// 14. bad code is a clean 404
+const badCode = await call('/api/tickets/checkin', {
+  method: 'POST',
+  cookie: login.cookie,
+  body: { code: 'NOPE123456' },
+});
+check('unknown code rejected', badCode.status === 404);
 
 console.log(results.join('\n'));
 if (results.some((r) => r.startsWith('FAIL'))) process.exit(1);
